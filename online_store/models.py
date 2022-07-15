@@ -12,16 +12,15 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     quantity = db.Column(db.Integer, nullable=False)
     product_name = db.Column(db.String(250), nullable=False)
-    product_description = db.Column(db.String(200), nullable=False)
+    product_description = db.Column(db.String(300), nullable=False)
     category = db.Column(db.String(30), nullable=False)
     price = db.Column(db.Integer, nullable=False)
     img_url = db.Column(db.String(500), nullable=False)
-    order = db.relationship("Order", back_populates="product_name")
+    order = db.relationship("Order", back_populates="product_name", cascade="all, delete")
     reviews = db.relationship("Reviews", backref="product")
 
     def __repr__(self):
         return f"<name:{self.product_name}>"
-
 
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
@@ -38,13 +37,14 @@ class Customer(UserMixin, db.Model):
     phone = db.Column(db.String(20), nullable=False)
     mail = db.Column(db.String(250), nullable=False, unique=True)
     password = db.Column(db.String(500), nullable=False)
+    role = db.Column(db.Integer, nullable=False)
     order = db.relationship("OrderDetails", back_populates="customer_name")
-    reviews = db.relationship("Reviews", backref="customer")
+    reviews = db.relationship("Reviews", backref="customer", cascade="all, delete")
 
     def __repr__(self):
         return f"<mail:{self.mail}>"
 
-    def get_token(self, expires_sec=300):
+    def get_token(self, expires_sec=1200):
         return jwt.encode({'reset_password': self.mail,
                            'exp': time() + expires_sec},
                           key=app.config['SECRET_KEY'])
@@ -112,6 +112,18 @@ class Reviews(db.Model):
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
 
+
+class Role(db.Model):
+    __tablename__ = "roles"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(15), nullable=False)
+
+
+
+    def __repr__(self):
+        return f"<name:{self.id}>, <product{self.name}>"
+    def to_dict(self):
+        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
 
 # db.drop_all()
 # db.create_all()

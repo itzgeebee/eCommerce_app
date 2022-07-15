@@ -11,7 +11,7 @@ def load_user(id):
     return Customer.query.get(id)
 
 
-@app.route("/", methods=["GET"])
+@app.route("/api", methods=["GET"])
 def home():
     try:
         phone_cat = Product.query.filter_by(category="Phone").limit(4).all()

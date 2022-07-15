@@ -1,20 +1,27 @@
 from flask import (render_template,
                    redirect, url_for,
-                   flash, request,
+                   request,
                    jsonify)
 from online_store.models import (Customer, Product,
                                  Order, OrderDetails,
                                  )
 from werkzeug.exceptions import abort
 from werkzeug.security import generate_password_hash, check_password_hash
-from online_store import app, db,mail_sender, login_manager
+from online_store import app, db, mail_sender, login_manager
 from flask_login import (login_user, login_required,
                          current_user, logout_user)
-from sqlalchemy.exc import IntegrityError
 from online_store.forms import (ChangePassword, CreateUserForm,
                                 LoginUserForm, ResetPassword,
                                 EditUserForm)
 from flask_mail import Message
+import re
+
+
+def validate_mail(address):
+    pattern = "^[a-zA-Z0-9-_]+@[a-zA-Z0-9]+\.[a-z]{1,3}$"
+    if re.match(pattern, address):
+        return True
+    return False
 
 
 def send_email(user):
@@ -26,236 +33,362 @@ def send_email(user):
                f"https://gadgehaven.herokuapp.com{url_for('verify_reset', token=tok)}"
     mail_sender.send(msg)
 
-
+# db.drop_all()
+# db.create_all()
 @login_manager.user_loader
 def load_user(id):
     return Customer.query.get(id)
 
 
-@app.route("/register", methods=["GET", "POST"])
+@app.route("/auth/register", methods=["POST"])
 def register():
-    error = request.args.get("error")
-    prev_page = request.args.get("prev_page")
-    reg_form = CreateUserForm()
-    if reg_form.validate_on_submit():
-        first_name = reg_form.first_name.data
-        last_name = reg_form.last_name.data
-        street = reg_form.street.data
-        city = reg_form.city.data
-        zip = reg_form.zip.data
-        phone = reg_form.phone.data
-        mail = reg_form.email.data
-        password = reg_form.password.data
-        confirm_password = reg_form.confirm_password.data
-        if password == confirm_password:
-            new_user = Customer(mail=mail,
-                                password=generate_password_hash(password, method='pbkdf2'
-                                                                                 ':sha256',
-                                                                salt_length=8),
-                                first_name=first_name,
-                                last_name=last_name,
-                                street=street,
-                                city=city,
-                                zip=zip,
-                                phone=phone
-                                )
-            try:
-                db.session.add(new_user)
-                db.session.commit()
-            except IntegrityError:
-                error = "email already exists"
+    reg_data = request.get_json()
+    first_name = reg_data.get("first_name", None)
+    last_name = reg_data.get("last_name", None)
+    street = reg_data.get("street", None)
+    city = reg_data.get("city", None)
+    zip = reg_data.get("zip", None)
+    phone = reg_data.get("phone", None)
+    mail = reg_data.get("email", None)
+    password = reg_data.get("password", None)
+    role = reg_data.get("role", None)
+    confirm_password = reg_data.get("confirm_password", None)
+    if not validate_mail(mail):
+        app.logger.error('bad email format')
+        return jsonify({
+            "success": False,
+            "message": "invalid mail format"
+        }), 400
+    if len(password) < 6:
+        return jsonify({
+            "success": False,
+            "message": "invalid password",
+            "error": 400
+        }), 400
+    if password != confirm_password:
+        app.logger.error("passwords do not match")
+        return jsonify({
+            "success": False,
+            "message": "password and confirm password do not match",
+            "error": 400
+        }), 400
+    new_user = Customer(mail=mail,
+                        password=generate_password_hash(password,
+                                                        method='pbkdf2'':sha256',
+                                                        salt_length=8),
+                        first_name=first_name,
+                        last_name=last_name,
+                        street=street,
+                        city=city,
+                        zip=zip,
+                        phone=phone,
+                        role=role
+                        )
 
-                app.logger.error('Error level log')
-                app.logger.critical('Critical level log')
-                db.session.rollback()
-                return redirect(url_for('login', error=error))
-            else:
-                login_user(new_user, remember=True)
-                if prev_page:
-                    return redirect(url_for('cart'))
-                return redirect(url_for('home'))
-        else:
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+    except Exception as e:
+        app.logger.error(e)
+        return jsonify({
+            "success": False,
+            "message": "email already exists",
+            "error": 422
+        }), 422
+    else:
+        login_user(new_user, remember=True)
+        return jsonify({
+            "success": True,
+            "logged_in": current_user.is_authenticated,
+            "user_id": current_user.id
+        })
 
-            app.logger.error('Error level log')
-            app.logger.critical('Critical level log')
-            error = "confirm password doesn't match password"
-            return redirect(url_for("register", error=error))
-    return render_template("register.html", form=reg_form,
-                           logged_in=current_user.is_authenticated,
-                           error=error)
 
-
-@app.route('/login', methods=["GET", "POST"])
+@app.route('/auth/login', methods=["POST"])
 def login():
-    error = request.args.get("error")
-    login_form = LoginUserForm()
-    prev_page = request.args.get("prev_page")
-    if login_form.validate_on_submit():
-        user_email = login_form.email.data
-        user_password = login_form.password.data
-        user = Customer.query.filter_by(mail=user_email).first()
-        if not user:
-            app.logger.error('Error level log')
-            app.logger.critical('Critical level log')
-            return redirect(url_for("login", error="Invalid email, try signing up"))
-        else:
-            if check_password_hash(pwhash=user.password, password=user_password):
-                login_user(user, remember=True)
-                if prev_page:
-                    return redirect(url_for('cart'))
-                return redirect(url_for('home', name=user.first_name))
-            else:
-                return redirect(url_for("login", error="Invalid password"))
-    return render_template("login.html", form=login_form,
-                           logged_in=current_user.is_authenticated,
-                           error=error)
+    login_data = request.get_json()
+    user_email = login_data.get("email", None)
+    user_password = login_data.get("password", None)
+    if not validate_mail(user_email):
+        return jsonify({
+            "success": False,
+            "message": "invalid mail format",
+            "error": 400
+        }), 400
+    user = Customer.query.filter_by(mail=user_email).first()
+    if not user:
+        app.logger.error('User not found')
+        return jsonify({
+            "success": False,
+            "message": "user not found",
+            "error": 404
+        }), 404
+
+    if not check_password_hash(pwhash=user.password, password=user_password):
+        abort(401)
+    login_user(user, remember=True)
+
+    return jsonify({
+        "success": True,
+        "logged_in": current_user.is_authenticated,
+        "user_id": current_user.id
+    })
 
 
-@app.route("/forgot-password", methods=["GET", "POST"])
+@app.route("/auth/forgot-password", methods=["POST"])
 def forgot_password():
-    if request.method == "POST":
-        mail = request.form.get("mail")
-        user = Customer.query.filter_by(mail=mail).first()
-        if not user:
-            return redirect(url_for('forgot_password', error="email not found"))
-        else:
-            try:
-                send_email(user)
-            except Exception as e:
-                print(e)
-                abort(500)
-            else:
-                mesg = "Check your email for link to change password"
-                return render_template("feedback.html", txt=mesg)
+    request_data = request.get_json()
+    mail = request_data.get("mail", None)
+    if not validate_mail(mail):
+        return jsonify({
+            "success": False,
+            "message": "invalid mail format",
+            "error": 400
+        }), 400
+    user = Customer.query.filter_by(mail=mail).first()
+    if not user:
+        return jsonify({
+            "success": False,
+            "message": "user not found",
+            "error": 404
+        }), 404
+    try:
+        send_email(user)
+    except Exception as e:
+        app.logger.error(e)
+        abort(500)
+    else:
+        return jsonify({
+            "success": True,
+            "message": "link sent to mail",
+            "mail": mail,
+            "logged_in": current_user.is_authenticated,
+        })
 
-    return render_template("forgot-password.html")
 
-
-@app.route("/reset-password", methods=["GET", "POST", "PUT"])
+@app.route("/auth/reset-password/<int:user_id>", methods=["PUT"])
 @login_required
-def password_reset():
-    error = request.args.get("error")
-    user_id = request.args.get("user_id")
-    np_form = ChangePassword()
-    if np_form.validate_on_submit():
-        old_password = np_form.old_password.data
-        new_password = np_form.new_password.data
-        confirm_password = np_form.confirm_password.data
-        if new_password == confirm_password:
-            user = Customer.query.get(user_id)
-            if check_password_hash(pwhash=user.password, password=old_password):
-                user.password = generate_password_hash(new_password, method='pbkdf2'
-                                                                            ':sha256',
-                                                       salt_length=8)
-                db.session.commit()
-                return redirect(url_for('account', user_id=user_id,
-                                        message="Password changed"))
-            else:
+def password_reset(user_id):
+    request_data = request.get_json()
+    old_password = request_data.get("old_password", None)
+    new_password = request_data.get("new_password", None)
+    confirm_password = request_data.get("confirm_password", None)
+    if len(new_password) < 6:
+        return jsonify({
+            "success": False,
+            "message": "invalid password",
+            "error": 400
+        }), 400
+    if old_password == new_password:
+        return jsonify({
+            "success": False,
+            "message": "old password is the same as new password",
+            "error": 400
+        }), 400
+    if new_password != confirm_password:
+        abort(400)
+    user = Customer.query.get(user_id)
+    if not user:
+        return jsonify({
+            "success": False,
+            "message": "user not found"
+        }), 404
 
-                error = "Invalid old password"
-                db.session.rollback()
-                return redirect(url_for("password_reset", error=error))
+    if not check_password_hash(pwhash=user.password, password=old_password):
+        return jsonify({
+            "success": False,
+            "message": "invalid old password",
+            "error": 401
+        }), 401
 
-        else:
+    user.password = generate_password_hash(new_password, method='pbkdf2'':sha256', salt_length=8)
 
-            error = "confirm password does not match new password"
-            return redirect(url_for("password_reset", error=error))
+    try:
+        db.session.commit()
+    except Exception as e:
+        app.logger.error(e)
+        abort(500)
+    else:
+        return jsonify({
+            "success": True,
+            "logged_in": current_user.is_authenticated,
+            "user_id": user_id
+        })
 
-    return render_template('edit.html', form=np_form,
-                           logged_in=current_user.is_authenticated,
-                           error=error)
 
-
-@app.route("/reset-password/<token>", methods=["GET", "POST"])
+@app.route("/auth/reset-password/<token>", methods=["POST"])
 def verify_reset(token):
-    error = request.args.get("error")
-    reset_form = ResetPassword()
+    request_data = request.get_json()
+    new_password = request_data.get("new_password")
+    confirm_password = request_data.get("confirm_password")
+    if len(new_password) < 6:
+        return jsonify({
+            "success": False,
+            "message": "invalid password",
+            "error": 400
+        }), 400
+    if new_password != confirm_password:
+        return jsonify({
+            "success": False,
+            "message": "old password is the same as new password",
+            "error": 400
+        }), 400
     user = Customer.verify_token(token)
     if user is None:
-        return jsonify({"error": "invalid or expired token"}), 404
-    if reset_form.validate_on_submit():
-        new_password = reset_form.new_password.data
-        confirm_password = reset_form.confirm_password.data
-        if new_password == confirm_password:
-            user.password = generate_password_hash(new_password,
-                                                   method='pbkdf2'
-                                                          ':sha256',
-                                                   salt_length=8)
-            db.session.commit()
-            login_user(user)
-            return redirect(url_for('home'))
-        else:
+        return jsonify({"error": 404,
+                        "success": False,
+                        "message": "invalid or expired token"}), 404
 
-            app.logger.error('Error level log')
-            app.logger.critical('Critical level log')
-            return redirect(url_for("verify_reset", error="passwords do not match"))
-
-    app.logger.error('Error level log')
-    app.logger.critical('Critical level log')
-    return render_template("edit.html", form=reset_form,
-                           logged_in=current_user.is_authenticated,
-                           error=error)
-
-
-@app.route('/account')
-@login_required
-def account():
-    user_id = request.args.get("user_id")
-    customer = Customer.query.get(user_id)
-    order_table = db.session.query(OrderDetails,
-                                   Order, Product).select_from(
-        OrderDetails).join(Order).join(Product).with_entities(OrderDetails.order_date,
-                                                              Product.price,
-                                                              Product.product_description,
-                                                              Order.quantity).filter(
-        OrderDetails.customer_id == user_id
-    ).all()
-
-    app.logger.error('Error level log')
-    app.logger.critical('Critical level log')
-    return render_template("accounts.html", user=customer,
-                           logged_in=current_user.is_authenticated,
-                           user_order=order_table)
-
-
-@app.route('/edit-profile', methods=["GET", "POST"])
-@login_required
-def edit_profile():
-    user_id = request.args.get("user_id")
-    user = Customer.query.get(user_id)
-    eu_form = EditUserForm(
-        email=user.mail,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        street=user.street,
-        city=user.city,
-        zip=user.zip,
-        phone=user.phone
-    )
-    if eu_form.validate_on_submit():
-        user.mail = eu_form.email.data
-        user.first_name = eu_form.first_name.data
-        user.last_name = eu_form.last_name.data
-        user.street = eu_form.street.data
-        user.city = eu_form.city.data
-        user.zip = eu_form.zip.data
-        user.phone = eu_form.phone.data
+    user.password = generate_password_hash(new_password, method='pbkdf2'':sha256', salt_length=8)
+    try:
         db.session.commit()
+    except Exception as e:
+        app.logger.error(e)
+        abort(500)
+    else:
+        login_user(user)
+        return jsonify({
+            "success": True,
+            "logged_in": current_user.is_authenticated,
+            "user_id": current_user.id
+        })
 
 
-        app.logger.error('Error level log')
-        app.logger.critical('Critical level log')
-        return redirect(url_for("account", user_id=user_id,
-                                message="Profile update successful"))
+@app.route('/user/<int:user_id>/account')
+@login_required
+def get_user_account(user_id):
+    customer = Customer.query.get(user_id)
+    if not customer:
+        abort(404)
+    customer_dict = {
+        "id": user_id,
+        "first_name": customer.first_name,
+        "last_name": customer.last_name,
+        "street": customer.street,
+        "city": customer.city,
+        "zip": customer.zip,
+        "phone": customer.phone,
+        "mail": customer.mail,
+        "role": customer.role
+    }
+    try:
+        order_table = db.session.query(OrderDetails,
+                                       Order, Product).select_from(
+            OrderDetails).join(Order).join(Product).with_entities(OrderDetails.order_date,
+                                                                  Product.price,
+                                                                  Product.product_description,
+                                                                  Order.quantity).filter(
+            OrderDetails.customer_id == user_id
+        ).all()
+
+    except Exception as e:
+        app.logger.error(e)
+        abort(500)
+    else:
+        orders = [{
+            "order_date": order.order_date,
+            "price": order.price,
+            "description": order.product_description,
+            "quantity": order.quantity,
+        } for order in order_table]
+
+        return jsonify({
+            "success": True,
+            "user": customer_dict,
+            "logged_in": current_user.is_authenticated,
+            "user_orders": orders,
+        })
 
 
-    app.logger.error('Error level log')
-    app.logger.critical('Critical level log')
-    return render_template("edit.html", form=eu_form,
-                           logged_in=current_user.is_authenticated)
+@app.route('/user/<int:user_id>')
+@login_required
+def get_user_details(user_id):
+    customer = Customer.query.get(user_id)
+    if not customer:
+        abort(404)
+
+    customer_dict = {
+        "id": user_id,
+        "first_name": customer.first_name,
+        "last_name": customer.last_name,
+        "street": customer.street,
+        "city": customer.city,
+        "zip": customer.zip,
+        "phone": customer.phone,
+        "mail": customer.mail,
+        "role": customer.role
+    }
+
+    return jsonify({
+            "user": customer_dict,
+            "logged_in": current_user.is_authenticated,
+            "success": True
+        })
 
 
-@app.route('/logout')
+
+@app.route('/user/<int:user_id>', methods=['PATCH'])
+@login_required
+def edit_profile(user_id):
+    request_data = request.get_json()
+    customer = Customer.query.get(user_id)
+
+    if not customer:
+        abort(404)
+    first_name = request_data.get("first_name", None)
+    last_name = request_data.get("last_name", None)
+    mail = request_data.get("mail", None)
+    phone = request_data.get("phone", None)
+    zip = request_data.get("zip", None)
+    street = request_data.get("street", None)
+    city = request_data.get("city", None)
+
+    if not validate_mail(mail):
+        abort(400)
+
+    customer.first_name = first_name
+    customer.last_name = last_name
+    customer.mail = mail
+    customer.phone = phone
+    customer.zip = zip
+    customer.street = street
+    customer.city = city
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        app.logger.error(e)
+        abort(422)
+    else:
+        return jsonify({
+            "success": True,
+            "logged_in": current_user.is_authenticated,
+            "user_id": customer.id
+        })
+
+@app.route('/user/<int:user_id>', methods=['DELETE'])
+@login_required
+def delete_profile(user_id):
+    customer = Customer.query.get(user_id)
+    if not customer:
+        abort(404)
+    db.session.delete(customer)
+    try:
+        db.session.commit()
+    except Exception as e:
+        app.logger.error(e)
+        abort(500)
+    else:
+        return jsonify({
+            "success": True,
+            "user_id": user_id,
+            "logged_in": current_user.is_authenticated
+        })
+
+@app.route('/auth/logout')
 def logout():
     logout_user()
-    return redirect(url_for('home'))
+    return jsonify({
+        "success": True,
+        "logged_in": current_user.is_authenticated
+    })

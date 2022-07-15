@@ -1,7 +1,7 @@
 from flask import (render_template,
                    redirect, url_for,
                    flash, request,
-                   jsonify, session)
+                   jsonify, session, abort)
 from online_store.models import (Product,
                                  Order, OrderDetails,
                                  )
@@ -12,8 +12,11 @@ from flask_mail import Message
 from threading import Thread
 from datetime import date
 import stripe
+import json
+import os
 
 stripe.api_key = app.config['STRIPE_SECRET_KEY']
+endpoint_secret = os.environ.get("endpoint_secret")
 
 
 def send_mail(app, msg):
@@ -21,111 +24,162 @@ def send_mail(app, msg):
         mail_sender.send(msg)
 
 
-@app.route('/create-checkout-session', methods=['POST'])
+@app.route('/payments/checkout', methods=['POST'])
 @login_required
 def create_checkout_session():
-    prod_id = session["product_ids"]
-    prod_qty = session["quantities"]
+    request_data = request.get_json()
+    if "cart_dict" not in session:
+        abort(404)
+
+    if session["cart_dict"] == {}:
+        abort(404)
+
+    cart_dict = session["cart_dict"]
+
     items_to_buy = []
-    for i in range(len(prod_id)):
-        product_to_buy = Product.query.get(prod_id[i])
-        qty = int(prod_qty[i])
+    for item in cart_dict:
+        product_to_buy = Product.query.get(int(item))
+        qty = int(cart_dict[item])
         qty_left = product_to_buy.quantity
         if qty > qty_left:
-            error = f"Sorry we only have {qty_left} quantity left"
-            return redirect(url_for("cart", error=error))
-        else:
-            line_dict = {
-                'price_data': {
-                    'currency': 'usd',
-                    'product_data': {
-                        'name': product_to_buy.product_description,
-                    },
-                    'unit_amount': (product_to_buy.price // 550) * 100,
-                },
-                'quantity': qty,
-            }
-            items_to_buy.append(line_dict)
+            abort(400)
 
-    strt = request.form.get("strt")
-    cty = request.form.get("city")
-    to_zip = request.form.get("zip")
+        line_dict = {
+            'price_data': {
+                'currency': 'usd',
+                'product_data': {
+                    'name': product_to_buy.product_description,
+                },
+                'unit_amount': (product_to_buy.price // 600) * 100,
+            },
+            'quantity': qty,
+
+        }
+        items_to_buy.append(line_dict)
+
+    strt = request_data.get("street", None)
+    cty = request_data.get("city", None)
+    to_zip = request_data.get("zip", None)
+
+    if not strt or not cty or not to_zip:
+        abort(400)
+    prod_ids = (str([*cart_dict.keys()]))
+    prod_qty = (str([*cart_dict.values()]))
 
     try:
         checkout_session = stripe.checkout.Session.create(
             line_items=items_to_buy,
             mode='payment',
             success_url=url_for("success",
-                                strt=strt,
-                                cty=cty,
-                                zip=to_zip,
                                 _external=True),
             cancel_url=url_for("cancel", _external=True),
+            metadata={"prod_ids": prod_ids,
+                      "prod_qty": prod_qty,
+                      "street": strt,
+                      "city": cty,
+                      "zip": to_zip
+                      }
+
         )
     except Exception as e:
         return str(e)
 
+    # return redirect(checkout_session.url, code=303)
+    return jsonify({
+        "success": True,
+        "logged_in": current_user.is_authenticated,
+        "stripe_url": checkout_session.url,
+    }), 303
 
-    return redirect(checkout_session.url, code=303)
 
-
-@app.route("/cancel")
+@app.route("/payments/cancel")
 def cancel():
-    mesg = "Transaction failed, please check your payment details and try again"
-    return render_template("feedback.html", txt=mesg)
+    return jsonify({
+        "success": False,
+        "message": "Transaction failed",
+        "logged_in": current_user.is_authenticated
+    })
 
 
-@app.route("/success", methods=["GET", "POST"])
+@app.route("/payments/success", methods=["GET"])
 @login_required
 def success():
-    id_list = session["product_ids"]
-    qty_list = session["quantities"]
+    session["cart_dict"].clear()
+    return jsonify({
+        "success": True,
+        "logged_in": current_user.is_authenticated,
+    })
 
-    customer_order = OrderDetails(
-        customer_name=current_user,
-        to_street=request.args.get("strt"),
-        to_city=request.args.get("cty"),
-        zip=request.args.get("zip"),
-        order_date=date.today()
-    )
 
-    db.session.add(customer_order)
+@app.route('/payments/stripe-webhook', methods=['POST'])
+def webhook():
+    event = None
+    receipt_url = ""
+    payload = request.data
 
-    for i in range(len(id_list)):
-        prod = Product.query.get(id_list[i])
-        prod.quantity -= int(qty_list[i])
-        order = Order(
-            product_name=prod,
-            quantity=int(qty_list[i]),
-            order_name=customer_order
+    try:
+        event = json.loads(payload)
+    except Exception as e:
+        app.logger.error('??  Webhook error while parsing basic request.' + str(e))
+        return jsonify(success=False)
+    if endpoint_secret:
+        # Only verify the event if there is an endpoint secret defined
+        # Otherwise use the basic event deserialized with json
+        sig_header = request.headers.get('stripe-signature')
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, endpoint_secret
+            )
+        except stripe.error.SignatureVerificationError as e:
+            app.logger.error('Webhook signature verification failed.' + str(e))
+            return jsonify(success=False)
+
+        # Handle the event
+    if event and event['type'] == 'payment_intent.succeeded':
+        payment_intent = event['data']['object']  # contains a stripe.PaymentIntent
+        app.logger.info('Payment for {} succeeded'.format(payment_intent['amount']))
+        receipt_url = (payment_intent["charges"]["data"][0]["receipt_url"])
+
+    elif event['type'] == 'payment_intent.payment_failed':
+        return jsonify({
+            "success": False,
+            "error": "payment_intent failed",
+        }), 400
+    else:
+        # Unexpected event type
+        app.logger.info('Unhandled event type {}'.format(event['type']))
+    if event['type'] == 'checkout.session.completed':
+        session_completed = event['data']["object"]
+        customer_order = OrderDetails(
+            customer_name=current_user,
+            to_street=session_completed['metadata']['street'],
+            to_city=session_completed['metadata']['city'],
+            zip=session_completed['metadata']['zip'],
+            order_date=date.today()
         )
-        db.session.add(order)
+        product_ids = (session_completed["metadata"]["prod_ids"]).replace("[", "").replace("]", "").split(",")
+        product_qty = (session_completed["metadata"]["prod_qty"]).replace("[", "").replace("]", "").split(",")
+        db.session.add(customer_order)
+        for index, item in enumerate(product_ids):
+            prod = Product.query.get(int(item))
+            prod.quantity -= int(product_qty[index])
+            order = Order(
+                product_name=prod,
+                quantity=int(item),
+                order_name=customer_order
+            )
+            db.session.add(order)
+        try:
+            db.session.commit()
+        except Exception as e:
+            app.logger.error(e)
+            abort(500)
 
-    db.session.commit()
+        msg = Message()
+        msg.subject = "Receipt from laptohaven"
+        msg.recipients = [current_user.mail]
+        msg.body = f'Thanks for your patronage, do come again, Here is the link to your receipt{receipt_url}'
+        # msg.html = template
+        Thread(target=send_mail, args=(app, msg)).start()
 
-    mesg = "Transaction Successful. Thanks for patronizing"
-
-    # template = f"<html>" \
-    #            f"<h2>Receipt</h2>\n <p>Your receipt from Laptohaven</p> \n" \
-    #            f"<ul><li>Product: {prod.product_description}</li>" \
-    #            f"<li>Price: {prod.price}</li>" \
-    #            f"<li>Price:Quantity: {qty}</li>" \
-    #            f"<li>Date: {date.today().strftime('%d %b, %Y')}</li>" \
-    #            f"</ul>" \
-    #            f"</html>"
-
-    msg = Message()
-    msg.subject = "Receipt from laptohaven"
-    msg.recipients = [current_user.mail]
-    msg.body = 'Thanks for your patronage, do come again'
-    # msg.html = template
-    Thread(target=send_mail, args=(app, msg)).start()
-    session.pop("product_ids")
-    session.pop("quantities")
-
-    app.logger.info('Info level log')
-    app.logger.warning('Warning level log')
-    app.logger.error('Error level log')
-    app.logger.critical('Critical level log')
-    return render_template("feedback.html", txt=mesg)
-
+    return jsonify(success=True)
