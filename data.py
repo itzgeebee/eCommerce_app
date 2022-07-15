@@ -1,11 +1,12 @@
 import pandas as pd
-from run import db, Product
+from online_store.models import Product
+from online_store import db
 
 
 class RawData:
     def __init__(self):
-        self.laptop_df = pd.read_csv("jumia_laptop_prices.csv")
-        self.phone_df = pd.read_csv("phone_prices.csv")
+        self.laptop_df = pd.read_csv("online_store/jumia_laptop_prices.csv")
+        self.phone_df = pd.read_csv("online_store/phone_prices.csv")
 
         self.laptop_dict = self.laptop_df.to_dict("list")
         self.phone_dict = self.phone_df.to_dict("list")
