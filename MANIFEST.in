@@ -1,0 +1,3 @@
+graft online_store/static
+graft online_store/templates
+global-exclude *.pyc
