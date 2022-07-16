@@ -1,4 +1,4 @@
-from flask import (request, jsonify,  abort)
+from flask import (request, jsonify, abort, render_template)
 from sqlalchemy import desc, func
 from online_store.models import (Customer, Product,
                                  Reviews, Order)
@@ -9,7 +9,9 @@ from flask_login import current_user, login_required
 @login_manager.user_loader
 def load_user(id):
     return Customer.query.get(id)
-
+@app.route("/")
+def get_index_page():
+    return render_template('index.html')
 
 @app.route("/api", methods=["GET"])
 def home():
