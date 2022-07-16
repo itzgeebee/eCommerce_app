@@ -1,4 +1,4 @@
-# An eCommerce Website built with Flask
+# An eCommerce API built with Flask
 Hosted on Heroku at https://gadgehaven.herokuapp.com/
 ## GadgeHaven
 
@@ -9,13 +9,13 @@ simple, but I decided to challenge myself and implement a fairly complicated eCo
 I am happy I made this decision because I was able to learn a lot in the process.
 
 ##Stack
-HTML, CSS, Javascript, Flask(Python), Postgresql, Stripe API for payments
+Flask(Python), Postgresql, Stripe API for payments
 ### Features
 These are the features of the application:
 #### Homepage
-1. Displays the products by the two categories: Phones and Laptops
-2. Displays the products based on the average rating in descending order
-3. Displays the products based on the number of purchases in descending order 
+1. returns the products by the two categories: Phones and Laptops
+2. returnss the products based on the average rating in descending order
+3. returns the products based on the number of purchases in descending order 
 #### Search
 1. The search feature returns the closest results to the name of the product, the specs of the product and the category
 #### Filter
@@ -54,14 +54,9 @@ These are the features of the application:
 
 [Fork](https://help.github.com/en/articles/fork-a-repo) the project repository and [clone](https://help.github.com/en/articles/cloning-a-repository) your forked repository to your machine. 
 
-### Backend
+### API Documentation
 
 The [backend](./online_store/README.md) directory contains a completed Flask and SQLAlchemy server. Files you should be looking to work on: 
 
-1. `online_store/__init__.py`
-2.`config.py`
-
-
-> View the [Backend README](./online_store/README.md) for more details.
-
+Access the API documentation [here](https://documenter.getpostman.com/view/20042182/UzQvsQD2).
 
