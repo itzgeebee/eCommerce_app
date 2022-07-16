@@ -5,7 +5,7 @@ Hosted on Heroku at https://gadgehaven.herokuapp.com/
 Gadgehaven is an eCommerce web application for gadgets like Laptops and Phones.
 This project was inspired by a project on my python hero to mastery course by Angela Yu.
 The project was supposed to be a simple online store with a payment system. I intended to go
-simple, but I decided to challenge myself and implement a fairly complicated eCommerce site.
+simple, but I decided to challenge myself and implement a fairly complicated eCommerce API.
 I am happy I made this decision because I was able to learn a lot in the process.
 
 ##Stack
@@ -13,9 +13,9 @@ Flask(Python), Postgresql, Stripe API for payments
 ### Features
 These are the features of the application:
 #### Homepage
-1. returns the products by the two categories: Phones and Laptops
-2. returnss the products based on the average rating in descending order
-3. returns the products based on the number of purchases in descending order 
+1. Returns the products by the two categories: Phones and Laptops
+2. Returns the products based on the average rating in descending order
+3. Returns the products based on the number of purchases in descending order 
 #### Search
 1. The search feature returns the closest results to the name of the product, the specs of the product and the category
 #### Filter
