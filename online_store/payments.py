@@ -1,9 +1,8 @@
-from flask import (render_template,
-                   redirect, url_for,
-                   flash, request,
+from flask import (url_for,
+                   request,
                    jsonify, session, abort)
 from online_store.models import (Product,
-                                 Order, OrderDetails,
+                                 Order, OrderDetails,Customer
                                  )
 from online_store import app, mail_sender, db
 from flask_login import (login_required,
@@ -77,7 +76,8 @@ def create_checkout_session():
                       "prod_qty": prod_qty,
                       "street": strt,
                       "city": cty,
-                      "zip": to_zip
+                      "zip": to_zip,
+                      "user_id": current_user.id
                       }
 
         )
@@ -140,6 +140,7 @@ def webhook():
         app.logger.info('Payment for {} succeeded'.format(payment_intent['amount']))
         receipt_url = (payment_intent["charges"]["data"][0]["receipt_url"])
 
+
     elif event['type'] == 'payment_intent.payment_failed':
         return jsonify({
             "success": False,
@@ -149,9 +150,11 @@ def webhook():
         # Unexpected event type
         app.logger.info('Unhandled event type {}'.format(event['type']))
     if event['type'] == 'checkout.session.completed':
+
         session_completed = event['data']["object"]
+        user = Customer.query.get(int(session_completed['metadata']['user_id']))
         customer_order = OrderDetails(
-            customer_name=current_user,
+            customer_name=user,
             to_street=session_completed['metadata']['street'],
             to_city=session_completed['metadata']['city'],
             zip=session_completed['metadata']['zip'],
@@ -177,7 +180,7 @@ def webhook():
 
         msg = Message()
         msg.subject = "Receipt from laptohaven"
-        msg.recipients = [current_user.mail]
+        msg.recipients = [user.mail]
         msg.body = f'Thanks for your patronage, do come again, Here is the link to your receipt{receipt_url}'
         # msg.html = template
         Thread(target=send_mail, args=(app, msg)).start()
