@@ -8,7 +8,7 @@ The project was supposed to be a simple online store with a payment system. I in
 simple, but I decided to challenge myself and implement a fairly complicated eCommerce API.
 I am happy I made this decision because I was able to learn a lot in the process.
 
-##Stack
+## Stack 
 Flask(Python), Postgresql, Stripe API for payments
 ### Features
 These are the features of the application:
@@ -50,9 +50,11 @@ These are the features of the application:
 9. View reviews
 10. Delete reviews
 
-## Starting the project
+## Starting the project (Development environment)
 
 - [Fork](https://help.github.com/en/articles/fork-a-repo) the project repository and [clone](https://help.github.com/en/articles/cloning-a-repository) your forked repository to your machine. 
+- Set up development environment
+- Run ``` pip install -r requirements.txt ```
 
 ### API Documentation
 
