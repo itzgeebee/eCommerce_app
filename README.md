@@ -55,6 +55,11 @@ These are the features of the application:
 - [Fork](https://help.github.com/en/articles/fork-a-repo) the project repository and [clone](https://help.github.com/en/articles/cloning-a-repository) your forked repository to your machine. 
 - Set up development environment
 - Run ``` pip install -r requirements.txt ```
+- Edit config file and comment out 'SERVER_NAME'
+- set up database
+- Run ``` $env:FLASK_APP = "run.py" ```
+- Run ``` $env:FLASK_ENV = "development" ```
+- Run ``` flask run --reload ```
 
 ### API Documentation
 
