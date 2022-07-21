@@ -52,7 +52,26 @@ These are the features of the application:
 
 ## Project Structure
 ```
-
++---online_store
+|    +---templates
+|    |     +---index.html
+|    +---_init_.py
+|    +---admin_views.py
+|    +---cart.py
+|    +---errorhandlers.py
+|    +---forms.py
+|    +---models.py
+|    +---payments.py
+|    +---queries.py
+|    +---users.py
++---MANIFEST.in
++---Procfile
++---README.md
++---config.py
++---data.py
++---requirements.txt
++---run.py
++---setup.py
 ```
 ## Starting the project (Development environment)
 
