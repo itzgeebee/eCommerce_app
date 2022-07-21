@@ -54,7 +54,7 @@ These are the features of the application:
 ```
 +---online_store
 |    +---templates
-|    |    +---index.html
+|    |   +---index.html
 |    +---_init_.py
 |    +---admin_views.py
 |    +---cart.py
