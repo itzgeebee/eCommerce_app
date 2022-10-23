@@ -21,6 +21,6 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_PRIVATE")
 SESSION_TYPE = "filesystem"
 DEBUG = True
 CORS_METHODS = ["GET", "HEAD", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"]
-SERVER_NAME = "gadgehaven.herokuapp.com"
+# SERVER_NAME = "gadgehaven.herokuapp.com"
 
 

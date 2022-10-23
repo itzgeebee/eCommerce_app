@@ -1,14 +1,12 @@
 import os
 from datetime import timedelta
 from flask import Flask
-from flask_bootstrap import Bootstrap
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
-from flask_gravatar import Gravatar
 from flask_mail import Mail
 from flask_migrate import Migrate
 from flask_session import Session
 from flask_cors import CORS
+from flask_bcrypt import Bcrypt
 
 
 def create_app(test_config=None):
@@ -25,31 +23,21 @@ def create_app(test_config=None):
         os.makedirs(app.instance_path)
     except OSError:
         pass
+    CORS(app, resources={r"/*": {"origins": "*"}})
 
     return app
 
 
 app = create_app()
-CORS(app, resources={r"/*": {"origins": "*"}})
-login_manager = LoginManager()
-login_manager.init_app(app)
 app.permanent_session_lifetime = timedelta(days=30)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 mail_sender = Mail(app)
-Bootstrap(app)
 Session(app)
+bcrypt = Bcrypt(app)
 
-gravatar = Gravatar(app,
-                    size=50,
-                    rating='g',
-                    default='retro',
-                    force_default=False,
-                    force_lower=False,
-                    use_ssl=False,
-                    base_url=None)
-app.jinja_env.add_extension('jinja2.ext.loopcontrols')
 
-from online_store import (queries, admin_views,
-                          users, cart,
-                          payments, errorhandlers)
+from . import (auth, products, admin_views,
+               users, cart,
+               payments, ratings,
+               errorhandlers)
