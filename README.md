@@ -80,10 +80,10 @@ These are the features of the application:
 - Run ``` pip install -r requirements.txt ```
 - Edit config file and comment out 'SERVER_NAME'
 - set up database
-- Run ``` $env:FLASK_APP = "run.py" ```
-- Run ``` $env:FLASK_ENV = "development" ```
-- Run ``` flask run --reload ```
+- Run ``` $export FLASK_APP=run.py ```
+- Run ``` $export FLASK_ENV=development ```
+- Run ``` flask run  ```
 
 ### API Documentation
-Access the API documentation [here](https://documenter.getpostman.com/view/20042182/UzQvsQD2).
+Access the API documentation [here](https://documenter.getpostman.com/view/23261733/2s84DuMzPS#e2597c6d-df85-4b86-9a03-c0104047b308).
 

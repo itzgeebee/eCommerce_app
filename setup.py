@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 
 setup(
-    name="online_store",
+    name="src",
     version="1.0.0",
     description="An online store",
     author="Gideon Balogun",
