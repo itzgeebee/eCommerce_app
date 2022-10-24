@@ -1,9 +1,7 @@
 from flask import (request, jsonify, abort, render_template, Blueprint)
 from sqlalchemy import desc, func
 
-from src.helpers.errors import invalid_token_response
-from src.helpers.auth_tokens import check_valid_header, decode_auth_token
-from src.models import (Customer, Product,
+from src.models import (Product,
                         Reviews, Order)
 from src import app, db
 
@@ -39,7 +37,7 @@ def transform_response(
     })
 
 
-@app.route("/api/v1/", methods=["GET"])
+@app.route("/api/v1/products/", methods=["GET"])
 def home():
     try:
         phone_cat = Product.query.filter_by(category="Phone").limit(4).all()
